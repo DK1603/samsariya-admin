@@ -1,6 +1,7 @@
 from typing import List, Optional
 from datetime import datetime, timedelta
 from .database import db
+from .config import ADMIN_IDS
 from .models import Order, InventoryItem, Admin, Config, OrderStatus, ClientNotification
 # Order Operations
 def _stringify_mongo_id(doc: dict) -> dict:
@@ -138,8 +139,20 @@ async def get_admins() -> List[Admin]:
     return admins
 
 async def is_admin(user_id: int) -> bool:
-    """Check if user is admin"""
-    admin = await db.admins.find_one({"user_id": user_id})
+    """Check if user is admin.
+
+    Priority:
+    1) Environment variable ADMIN_IDS
+    2) Fallback to admins stored in MongoDB
+    """
+    try:
+        if int(user_id) in ADMIN_IDS:
+            return True
+    except Exception:
+        # Ignore cast issues and continue to DB fallback
+        pass
+
+    admin = await db.admins.find_one({"user_id": int(user_id)})
     return admin is not None
 
 async def add_admin(admin: Admin) -> str:
