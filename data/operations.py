@@ -112,25 +112,38 @@ async def analytics_summary(period: str) -> Dict[str, object]:
     """
     start = _period_start(period)
     cursor = db.orders.find({"created_at": {"$gte": start}})
-    orders: List[Order] = []
-    async for doc in cursor:
-        orders.append(Order(**_stringify_mongo_id(doc)))
 
-    non_cancelled = [o for o in orders if o.status != OrderStatus.CANCELLED]
-    completed = [o for o in orders if o.status == OrderStatus.COMPLETED]
-
-    revenue_completed = sum(int(o.total or 0) for o in completed)
-    orders_completed = len(completed)
-    orders_total = len(non_cancelled)
-    avg_check_completed = (revenue_completed // orders_completed) if orders_completed > 0 else 0
-
+    # Aggregate on raw docs to tolerate unknown statuses like 'pending_admin_confirmation'
+    orders_total = 0
+    orders_completed = 0
+    revenue_completed = 0
     item_key_to_qty: Dict[str, int] = {}
-    for o in non_cancelled:
-        for key, qty in (o.items or {}).items():
+
+    async for raw in cursor:
+        doc = _stringify_mongo_id(raw)
+        status_raw = str(doc.get("status", "")).lower()
+
+        is_cancelled = status_raw in ("cancelled", "canceled")
+        is_completed = status_raw == "completed"
+
+        if not is_cancelled:
+            orders_total += 1
+            items = doc.get("items") or {}
+            if isinstance(items, dict):
+                for key, qty in items.items():
+                    try:
+                        item_key_to_qty[key] = item_key_to_qty.get(key, 0) + int(qty or 0)
+                    except Exception:
+                        continue
+
+        if is_completed:
+            orders_completed += 1
             try:
-                item_key_to_qty[key] = item_key_to_qty.get(key, 0) + int(qty or 0)
+                revenue_completed += int(doc.get("total") or 0)
             except Exception:
-                continue
+                pass
+
+    avg_check_completed = (revenue_completed // orders_completed) if orders_completed > 0 else 0
     top_items = sorted(item_key_to_qty.items(), key=lambda kv: kv[1], reverse=True)[:3]
 
     return {

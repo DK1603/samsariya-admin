@@ -55,11 +55,9 @@ async def cmd_menu(message: types.Message):
 /remove_item — Удалить товар
 
 **📊 Статистика:**
-/stats_orders — История заказов
 /weekly_report — Недельный отчёт
-/monthly_report — Месячный отчёт
-/earnings — Доходы
-/demand_chart — График спроса
+/stats_orders [today|week|month] — Сводка заказов
+/earnings [today|week|month] — Выручка
 
 **⚙️ Настройки:**
 /config — Текущие настройки
@@ -730,11 +728,9 @@ async def cmd_help(message: types.Message):
 /remove_item — Удалить товар
 
 **Статистика:**
-/stats_orders — История заказов
-/weekly_report — Недельный отчёт
-/monthly_report — Месячный отчёт
-/earnings — Доходы
-/demand_chart — График спроса
+/weekly_report — Недельный отчёт (итоги, выручка, топ‑позиции)
+/stats_orders [today|week|month] — Сводка по заказам (по умолчанию week)
+/earnings [today|week|month] — Выручка за период (по умолчанию week)
 
 **Настройки:**
 /config — Текущие настройки
@@ -753,8 +749,14 @@ async def cmd_config(message: types.Message):
         return
     
     admins = await get_admins()
-    admin_names = ', '.join(admin.name for admin in admins)
-    await message.answer(f"Текущие настройки:\nРабочие часы: {WORK_HOURS}\nАдминистраторы: {admin_names}")
+    admin_names = ', '.join(admin.name for admin in admins) or "—"
+    env_admins = ', '.join(str(a) for a in ADMIN_IDS) or "—"
+    await message.answer(
+        "Текущие настройки:\n"
+        f"Рабочие часы: {WORK_HOURS}\n"
+        f"Администраторы (БД): {admin_names}\n"
+        f"Администраторы (ENV): {env_admins}"
+    )
 
 # 5. Statistics
 @router.message(Command("stats_orders"))
@@ -807,26 +809,10 @@ async def cmd_weekly_report(message: types.Message):
 
 @router.message(Command("monthly_report"))
 async def cmd_monthly_report(message: types.Message):
-    """Generate and send a monthly sales report."""
     if not await is_admin(message.from_user.id):
         await message.answer("⛔️ Доступ запрещён. Вы не администратор.")
         return
-    summary = await analytics_summary("month")
-    orders_total = summary["orders_total"]
-    orders_completed = summary["orders_completed"]
-    revenue = summary["revenue_completed"]
-    avg_check = summary["avg_check_completed"]
-    top_items = summary["top_items"]
-    top_lines = "\n".join([f"• {k}: {v} шт" for k, v in top_items]) or "—"
-    text = (
-        "📊 Месячный отчёт:\n\n"
-        f"Заказы (всего, без отмен): {orders_total}\n"
-        f"Завершено: {orders_completed}\n"
-        f"Выручка (завершённые): {revenue:,} сум\n"
-        f"Средний чек: {avg_check:,} сум\n\n"
-        f"Топ позиций:\n{top_lines}"
-    )
-    await message.answer(text)
+    await message.answer("Команда отключена. Используйте /weekly_report.")
 
 @router.message(Command("earnings"))
 async def cmd_earnings(message: types.Message):
@@ -836,6 +822,7 @@ async def cmd_earnings(message: types.Message):
         return
     parts = (message.text or "").split()
     period = parts[1].lower() if len(parts) > 1 else "week"
+    from data.operations import analytics_earnings
     revenue = await analytics_earnings(period)
     await message.answer(f"💰 Выручка ({period}, завершённые заказы): {revenue:,} сум")
 
