@@ -8,6 +8,7 @@ load_dotenv()
 # Secrets must be provided via .env; no hardcoded defaults
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CLIENT_BOT_TOKEN = os.getenv("CLIENT_BOT_TOKEN")  # Token for client bot
+SHEETS_WEBHOOK_URL = os.getenv("SHEETS_WEBHOOK_URL")  # Google Apps Script Web App URL
 
 # Parse admin IDs from environment variable
 admin_ids_str = os.getenv("ADMIN_IDS", "")

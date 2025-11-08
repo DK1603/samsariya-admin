@@ -10,6 +10,8 @@ from data.config import BOT_TOKEN, ADMIN_IDS
 from data.database import db
 from bot.handlers import router
 from data.operations import seed_availability_from_inventory, get_new_orders
+from utils.sheets import append_order_to_sheet
+from data.operations import mark_order_sheet_synced
 from data.models import OrderStatus
 
 async def set_bot_commands(bot: Bot):
@@ -85,6 +87,15 @@ async def check_new_orders(bot: Bot):
                         except Exception as e:
                             print(f"Failed to send order notification to admin {admin_id}: {e}")
                     
+                    # Push to Google Sheets once (avoid duplicates)
+                    try:
+                        if not getattr(order, "sheet_synced", False):
+                            ok = await append_order_to_sheet(order)
+                            if ok:
+                                await mark_order_sheet_synced(order.id)
+                    except Exception as e:
+                        print(f"Failed to sync order {order.id} to Sheets: {e}")
+
                     # Mark as notified
                     notified_orders.add(order.id)
                     print(f"Notified admins about new order: {order.id}")

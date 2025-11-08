@@ -40,6 +40,8 @@ class Order(BaseModel):
     is_preorder: Optional[bool] = None
     # Message tracking for editing
     client_message_id: Optional[int] = None  # Telegram message ID sent to client
+    # Sheet sync flag
+    sheet_synced: Optional[bool] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

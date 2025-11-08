@@ -58,6 +58,15 @@ async def update_order_message_id(order_id: str, message_id: int) -> bool:
     )
     return result.modified_count > 0
 
+async def mark_order_sheet_synced(order_id: str) -> bool:
+    """Mark order as synced to Google Sheets"""
+    from bson import ObjectId
+    result = await db.orders.update_one(
+        {"_id": ObjectId(order_id)},
+        {"$set": {"sheet_synced": True, "updated_at": datetime.utcnow()}}
+    )
+    return result.modified_count > 0
+
 async def get_orders_by_period(period: str) -> List[Order]:
     """Get orders for a specific period"""
     now = datetime.utcnow()
