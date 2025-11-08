@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Set
 from datetime import datetime, timedelta
 from .database import db
 from .config import ADMIN_IDS
@@ -16,7 +16,7 @@ def _stringify_mongo_id(doc: dict) -> dict:
         except Exception:
             pass
     return doc
-from typing import Dict, Set
+ 
 
 # Order Operations
 async def create_order(order: Order) -> str:
@@ -84,6 +84,69 @@ async def get_orders_by_period(period: str) -> List[Order]:
     async for doc in cursor:
         orders.append(Order(**_stringify_mongo_id(doc)))
     return orders
+
+# -------------------------------
+# Analytics helpers
+# -------------------------------
+def _period_start(period: str) -> datetime:
+    now = datetime.utcnow()
+    p = (period or "").lower().strip()
+    if p in ("today", "day", "сегодня"):
+        return now.replace(hour=0, minute=0, second=0, microsecond=0)
+    if p in ("week", "неделя"):
+        return now - timedelta(days=7)
+    if p in ("month", "месяц"):
+        return now - timedelta(days=30)
+    # default to week if unknown
+    return now - timedelta(days=7)
+
+async def analytics_summary(period: str) -> Dict[str, object]:
+    """
+    Compute analytics for a period.
+    Metrics:
+      - orders_total: non-cancelled count
+      - orders_completed: completed count
+      - revenue_completed: sum(total) for completed
+      - avg_check_completed: revenue_completed / orders_completed (if >0)
+      - top_items: list[(key, qty)] top-3 by quantity across non-cancelled
+    """
+    start = _period_start(period)
+    cursor = db.orders.find({"created_at": {"$gte": start}})
+    orders: List[Order] = []
+    async for doc in cursor:
+        orders.append(Order(**_stringify_mongo_id(doc)))
+
+    non_cancelled = [o for o in orders if o.status != OrderStatus.CANCELLED]
+    completed = [o for o in orders if o.status == OrderStatus.COMPLETED]
+
+    revenue_completed = sum(int(o.total or 0) for o in completed)
+    orders_completed = len(completed)
+    orders_total = len(non_cancelled)
+    avg_check_completed = (revenue_completed // orders_completed) if orders_completed > 0 else 0
+
+    item_key_to_qty: Dict[str, int] = {}
+    for o in non_cancelled:
+        for key, qty in (o.items or {}).items():
+            try:
+                item_key_to_qty[key] = item_key_to_qty.get(key, 0) + int(qty or 0)
+            except Exception:
+                continue
+    top_items = sorted(item_key_to_qty.items(), key=lambda kv: kv[1], reverse=True)[:3]
+
+    return {
+        "orders_total": orders_total,
+        "orders_completed": orders_completed,
+        "revenue_completed": revenue_completed,
+        "avg_check_completed": avg_check_completed,
+        "top_items": top_items,
+        "period": period,
+        "start": start,
+    }
+
+async def analytics_earnings(period: str) -> int:
+    """Return revenue for completed orders in period."""
+    summary = await analytics_summary(period)
+    return int(summary["revenue_completed"])
 
 # Inventory Operations
 async def get_inventory() -> List[InventoryItem]:

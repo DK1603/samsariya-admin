@@ -13,6 +13,8 @@ from data.operations import (
     update_order_status,
     inventory_key_exists,
     create_client_notification,
+    analytics_summary,
+    analytics_earnings,
 )
 from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
@@ -757,25 +759,84 @@ async def cmd_config(message: types.Message):
 # 5. Statistics
 @router.message(Command("stats_orders"))
 async def cmd_stats_orders(message: types.Message):
-    """Show order history for a period."""
-    pass
+    """Show order stats for a period: today|week|month (default: week)."""
+    if not await is_admin(message.from_user.id):
+        await message.answer("⛔️ Доступ запрещён. Вы не администратор.")
+        return
+    parts = (message.text or "").split()
+    period = parts[1].lower() if len(parts) > 1 else "week"
+    summary = await analytics_summary(period)
+    orders_total = summary["orders_total"]
+    orders_completed = summary["orders_completed"]
+    revenue = summary["revenue_completed"]
+    avg_check = summary["avg_check_completed"]
+    top_items = summary["top_items"]
+    top_lines = "\n".join([f"• {k}: {v} шт" for k, v in top_items]) or "—"
+    text = (
+        f"📊 Статистика ({period}):\n\n"
+        f"Заказы (всего, без отмен): {orders_total}\n"
+        f"Завершено: {orders_completed}\n"
+        f"Выручка (завершённые): {revenue:,} сум\n"
+        f"Средний чек: {avg_check:,} сум\n\n"
+        f"Топ позиций:\n{top_lines}"
+    )
+    await message.answer(text)
 
 @router.message(Command("weekly_report"))
 async def cmd_weekly_report(message: types.Message):
     """Generate and send a weekly sales report."""
-    pass
+    if not await is_admin(message.from_user.id):
+        await message.answer("⛔️ Доступ запрещён. Вы не администратор.")
+        return
+    summary = await analytics_summary("week")
+    orders_total = summary["orders_total"]
+    orders_completed = summary["orders_completed"]
+    revenue = summary["revenue_completed"]
+    avg_check = summary["avg_check_completed"]
+    top_items = summary["top_items"]
+    top_lines = "\n".join([f"• {k}: {v} шт" for k, v in top_items]) or "—"
+    text = (
+        "📈 Недельный отчёт:\n\n"
+        f"Заказы (всего, без отмен): {orders_total}\n"
+        f"Завершено: {orders_completed}\n"
+        f"Выручка (завершённые): {revenue:,} сум\n"
+        f"Средний чек: {avg_check:,} сум\n\n"
+        f"Топ позиций:\n{top_lines}"
+    )
+    await message.answer(text)
 
 @router.message(Command("monthly_report"))
 async def cmd_monthly_report(message: types.Message):
     """Generate and send a monthly sales report."""
-    pass
+    if not await is_admin(message.from_user.id):
+        await message.answer("⛔️ Доступ запрещён. Вы не администратор.")
+        return
+    summary = await analytics_summary("month")
+    orders_total = summary["orders_total"]
+    orders_completed = summary["orders_completed"]
+    revenue = summary["revenue_completed"]
+    avg_check = summary["avg_check_completed"]
+    top_items = summary["top_items"]
+    top_lines = "\n".join([f"• {k}: {v} шт" for k, v in top_items]) or "—"
+    text = (
+        "📊 Месячный отчёт:\n\n"
+        f"Заказы (всего, без отмен): {orders_total}\n"
+        f"Завершено: {orders_completed}\n"
+        f"Выручка (завершённые): {revenue:,} сум\n"
+        f"Средний чек: {avg_check:,} сум\n\n"
+        f"Топ позиций:\n{top_lines}"
+    )
+    await message.answer(text)
 
 @router.message(Command("earnings"))
 async def cmd_earnings(message: types.Message):
-    """Show total earnings for a period."""
-    pass
+    """Show total earnings for a period: today|week|month (default: week)."""
+    if not await is_admin(message.from_user.id):
+        await message.answer("⛔️ Доступ запрещён. Вы не администратор.")
+        return
+    parts = (message.text or "").split()
+    period = parts[1].lower() if len(parts) > 1 else "week"
+    revenue = await analytics_earnings(period)
+    await message.answer(f"💰 Выручка ({period}, завершённые заказы): {revenue:,} сум")
 
-@router.message(Command("demand_chart"))
-async def cmd_demand_chart(message: types.Message):
-    """Send a chart of item demand for a period."""
-    pass 
+# demand_chart removed per request
