@@ -10,6 +10,7 @@ class OrderStatus(str, Enum):
     READY = "ready"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
+    PAYMENT_FAILED = "payment_failed"  # Card payment rejected
 
 class PaymentMethod(str, Enum):
     CASH = "cash"
@@ -38,6 +39,7 @@ class Order(BaseModel):
     payment_verified: Optional[bool] = None
     payment_amount: Optional[int] = None
     is_preorder: Optional[bool] = None
+    requires_payment_check: Optional[bool] = None  # True if card payment needs admin verification
     # Message tracking for editing
     client_message_id: Optional[int] = None  # Telegram message ID sent to client
     # Sheet sync flag

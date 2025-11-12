@@ -123,7 +123,7 @@ async def analytics_summary(period: str) -> Dict[str, object]:
         doc = _stringify_mongo_id(raw)
         status_raw = str(doc.get("status", "")).lower()
 
-        is_cancelled = status_raw in ("cancelled", "canceled")
+        is_cancelled = status_raw in ("cancelled", "canceled", "payment_failed")
         is_completed = status_raw == "completed"
 
         if not is_cancelled:

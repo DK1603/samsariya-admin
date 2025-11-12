@@ -83,21 +83,36 @@ def _format_order_summary(order) -> str:
     else:
         name = "—"
     
-    # Add payment status for card payments
+    # Build summary lines
+    lines = []
+    
+    # Add payment verification warning for card payments
+    if order.requires_payment_check:
+        lines.append("⚠️ ТРЕБУЕТ ПРОВЕРКИ ОПЛАТЫ")
+    
+    lines.append(f"🆔 {order.id}")
+    lines.append(f"👤 {name}")
+    
+    # Add payment status indicator
     payment_status = ""
     if "карт" in order.method.lower() or "card" in order.method.lower():
         if order.payment_verified:
             payment_status = " 💳✅"
-        else:
+        elif order.requires_payment_check:
             payment_status = " 💳⏳"
+        else:
+            payment_status = " 💳"
     
-    return (
-        f"🆔 {order.id}\n"
-        f"👤 {name}\n"
-        f"💰 {order.total:,} сум{payment_status}\n"
-        f"📦 {len(order.items)} позиций\n"
-        f"📅 {order.created_at.strftime('%d.%m.%Y %H:%M')}\n"
-    )
+    lines.append(f"💰 {order.total:,} сум{payment_status}")
+    
+    # Show claimed payment amount if card payment
+    if order.requires_payment_check and order.payment_amount:
+        lines.append(f"⚠️ Клиент указал: {order.payment_amount:,} сум")
+    
+    lines.append(f"📦 {len(order.items)} позиций")
+    lines.append(f"📅 {order.created_at.strftime('%d.%m.%Y %H:%M')}")
+    
+    return "\n".join(lines)
 
 
 def _build_order_actions_kb(order, expanded: bool = False) -> InlineKeyboardMarkup:
@@ -108,9 +123,18 @@ def _build_order_actions_kb(order, expanded: bool = False) -> InlineKeyboardMark
             InlineKeyboardButton(text="👁 Открыть", callback_data=f"order:open:{order.id}")
         )
         if order.status == OrderStatus.NEW:
-            kb.row(
-                InlineKeyboardButton(text="✅ Принять", callback_data=f"order:confirm:{order.id}:accepted")
-            )
+            # For card payments requiring verification, show different buttons
+            if order.requires_payment_check:
+                kb.row(
+                    InlineKeyboardButton(text="✅ Подтвердить оплату", callback_data=f"order:confirm:{order.id}:accepted")
+                )
+                kb.row(
+                    InlineKeyboardButton(text="❌ Отклонить оплату", callback_data=f"order:confirm:{order.id}:payment_failed")
+                )
+            else:
+                kb.row(
+                    InlineKeyboardButton(text="✅ Принять", callback_data=f"order:confirm:{order.id}:accepted")
+                )
         kb.row(
             InlineKeyboardButton(text="✖️ Отменить", callback_data=f"order:confirm:{order.id}:cancelled")
         )
@@ -120,30 +144,44 @@ def _build_order_actions_kb(order, expanded: bool = False) -> InlineKeyboardMark
     kb.row(
         InlineKeyboardButton(text="🔽 Закрыть", callback_data=f"order:close:{order.id}")
     )
-    next_actions_map = {
-        OrderStatus.NEW: [OrderStatus.ACCEPTED, OrderStatus.CANCELLED],
-        OrderStatus.ACCEPTED: [OrderStatus.IN_PROGRESS, OrderStatus.CANCELLED],
-        OrderStatus.IN_PROGRESS: [OrderStatus.READY, OrderStatus.CANCELLED],
-        OrderStatus.READY: [OrderStatus.COMPLETED, OrderStatus.CANCELLED],
-    }
-    title_map = {
-        OrderStatus.ACCEPTED: "✅ Принять",
-        OrderStatus.IN_PROGRESS: "▶️ В работу",
-        OrderStatus.READY: "🍽 Готово",
-        OrderStatus.COMPLETED: "✔️ Завершить",
-        OrderStatus.CANCELLED: "✖️ Отменить",
-    }
-    actions = next_actions_map.get(order.status, [])
-    for status in actions:
-        kb.row(
-            InlineKeyboardButton(
-                text=title_map.get(status, status.value),
-                callback_data=f"order:confirm:{order.id}:{status.value}",
-            )
-        )
     
-    # Add hide option for completed or cancelled orders
-    if order.status in [OrderStatus.COMPLETED, OrderStatus.CANCELLED]:
+    # For card payments requiring verification in NEW status
+    if order.status == OrderStatus.NEW and order.requires_payment_check:
+        kb.row(
+            InlineKeyboardButton(text="✅ Подтвердить оплату", callback_data=f"order:confirm:{order.id}:accepted")
+        )
+        kb.row(
+            InlineKeyboardButton(text="❌ Отклонить оплату", callback_data=f"order:confirm:{order.id}:payment_failed")
+        )
+        kb.row(
+            InlineKeyboardButton(text="✖️ Отменить заказ", callback_data=f"order:confirm:{order.id}:cancelled")
+        )
+    else:
+        # Normal status transitions
+        next_actions_map = {
+            OrderStatus.NEW: [OrderStatus.ACCEPTED, OrderStatus.CANCELLED],
+            OrderStatus.ACCEPTED: [OrderStatus.IN_PROGRESS, OrderStatus.CANCELLED],
+            OrderStatus.IN_PROGRESS: [OrderStatus.READY, OrderStatus.CANCELLED],
+            OrderStatus.READY: [OrderStatus.COMPLETED, OrderStatus.CANCELLED],
+        }
+        title_map = {
+            OrderStatus.ACCEPTED: "✅ Принять",
+            OrderStatus.IN_PROGRESS: "▶️ В работу",
+            OrderStatus.READY: "🍽 Готово",
+            OrderStatus.COMPLETED: "✔️ Завершить",
+            OrderStatus.CANCELLED: "✖️ Отменить",
+        }
+        actions = next_actions_map.get(order.status, [])
+        for status in actions:
+            kb.row(
+                InlineKeyboardButton(
+                    text=title_map.get(status, status.value),
+                    callback_data=f"order:confirm:{order.id}:{status.value}",
+                )
+            )
+    
+    # Add hide option for completed, cancelled, or payment_failed orders
+    if order.status in [OrderStatus.COMPLETED, OrderStatus.CANCELLED, OrderStatus.PAYMENT_FAILED]:
         kb.row(
             InlineKeyboardButton(text="🙈 Скрыть", callback_data=f"order:confirm_hide:{order.id}")
         )
@@ -159,7 +197,8 @@ def _build_confirmation_kb(order_id: str, status: str) -> InlineKeyboardMarkup:
         "in_progress": "перевести в работу", 
         "ready": "отметить как готово",
         "completed": "завершить",
-        "cancelled": "отменить"
+        "cancelled": "отменить",
+        "payment_failed": "отклонить оплату"
     }
     
     status_text = status_texts.get(status, status)
@@ -208,9 +247,21 @@ async def cmd_new_orders(message: types.Message):
         await message.answer("📭 Новых заказов нет.")
         return
     
-    await message.answer("📋 Новые заказы:")
-    for order in orders:
-        await message.answer(_format_order_summary(order), reply_markup=_build_order_actions_kb(order, expanded=False))
+    # Separate card payment orders requiring verification
+    card_payment_orders = [o for o in orders if o.requires_payment_check]
+    regular_orders = [o for o in orders if not o.requires_payment_check]
+    
+    # Show card payment orders first (priority)
+    if card_payment_orders:
+        await message.answer("⚠️ Заказы с оплатой картой (требуют проверки):")
+        for order in card_payment_orders:
+            await message.answer(_format_order_summary(order), reply_markup=_build_order_actions_kb(order, expanded=False))
+    
+    # Then show regular orders
+    if regular_orders:
+        await message.answer("📋 Обычные заказы:")
+        for order in regular_orders:
+            await message.answer(_format_order_summary(order), reply_markup=_build_order_actions_kb(order, expanded=False))
 
 @router.message(lambda m: m.text and m.text.startswith("/order_"))
 async def cmd_order_detail(message: types.Message):
@@ -226,12 +277,35 @@ async def cmd_order_detail(message: types.Message):
     # Build detailed view
     lines = ["📦 Детали заказа:"]
     lines.append(_format_order_summary(order))
-    lines.append(f"📍 Доставка: {order.delivery}")
-    lines.append(f"⏰ Время: {order.time}")
-    lines.append(f"💳 Оплата: {order.method}")
-    lines.append("\nСостав:")
+    
+    # Contact details
+    if order.customer_phone:
+        lines.append(f"📞 {order.customer_phone}")
+    elif order.phone:
+        lines.append(f"📞 {order.phone}")
+    
+    if order.customer_address:
+        lines.append(f"📍 {order.customer_address}")
+    elif order.address:
+        lines.append(f"📍 {order.address}")
+    
+    lines.append(f"🚚 {order.delivery}")
+    lines.append(f"⏰ {order.time}")
+    lines.append(f"💳 {order.method}")
+    
+    # Payment verification warning
+    if order.requires_payment_check:
+        lines.append("\n⚠️ ТРЕБУЕТ ПРОВЕРКИ ОПЛАТЫ")
+        if order.payment_amount:
+            lines.append(f"Клиент указал сумму: {order.payment_amount:,} сум")
+        if order.payment_verified:
+            lines.append("✅ Клиент отправил подтверждение оплаты")
+        lines.append("⏰ Проверьте оплату в течение 10 минут")
+    
+    lines.append("\n📦 Состав:")
     for key, qty in order.items.items():
         lines.append(f" • {key}: {qty} шт")
+    
     if order.summary:
         lines.append("\nПримечание:")
         lines.append(order.summary)
@@ -250,6 +324,7 @@ async def _notify_client_status(order, new_status: OrderStatus):
         OrderStatus.READY: "🚚 Ваш заказ в пути",
         OrderStatus.COMPLETED: "🏠 Заказ доставлен",
         OrderStatus.CANCELLED: "❌ Заказ отменён",
+        OrderStatus.PAYMENT_FAILED: "❌ Оплата отклонена",
     }
     
     # Get customer name
@@ -719,8 +794,14 @@ async def cmd_help(message: types.Message):
 /help — Эта справка
 
 **Заказы:**
-/new_orders — Новые заказы
+/new_orders — Новые заказы (отдельно показывает заказы с оплатой картой)
 /order_<ID> — Детали заказа
+
+**Работа с заказами:**
+• Для заказов с оплатой картой: подтвердить/отклонить оплату
+• Для обычных заказов: принять → в работу → готово → завершить
+• Все заказы можно отменить на любом этапе
+• После завершения/отмены можно скрыть заказ из списка
 
 **Инвентарь:**
 /inventory — Управление доступностью
@@ -737,8 +818,13 @@ async def cmd_help(message: types.Message):
 /broadcast — Рассылка администраторам
 
 **Статусы заказов:**
-/set_status_<ID>_<status> — Изменить статус
-Статусы: new, accepted, in_progress, ready, completed, cancelled"""
+• new — Новый заказ
+• accepted — Принят (оплата подтверждена для карты)
+• in_progress — В работе
+• ready — Готов к доставке
+• completed — Завершён
+• cancelled — Отменён
+• payment_failed — Оплата отклонена"""
     
     await message.answer(help_text, parse_mode="Markdown")
 
