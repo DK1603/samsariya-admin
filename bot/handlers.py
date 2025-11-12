@@ -79,7 +79,8 @@ def _format_order_summary(order) -> str:
         name = order.name
     elif order.contact:
         # Old format: "Name, Phone, Address"
-        name = order.contact.split(',')[0]
+        parts = order.contact.split(',')
+        name = parts[0].strip() if parts else "—"
     else:
         name = "—"
     
@@ -93,17 +94,19 @@ def _format_order_summary(order) -> str:
     lines.append(f"🆔 {order.id}")
     lines.append(f"👤 {name}")
     
-    # Add payment status indicator
-    payment_status = ""
+    # Determine payment method clearly
+    payment_method = ""
     if "карт" in order.method.lower() or "card" in order.method.lower():
+        payment_method = "💳 Оплата картой"
         if order.payment_verified:
-            payment_status = " 💳✅"
+            payment_method += " ✅"
         elif order.requires_payment_check:
-            payment_status = " 💳⏳"
-        else:
-            payment_status = " 💳"
+            payment_method += " ⏳"
+    else:
+        payment_method = "💵 Наличные"
     
-    lines.append(f"💰 {order.total:,} сум{payment_status}")
+    lines.append(f"💰 {order.total:,} сум")
+    lines.append(f"💳 {payment_method}")
     
     # Show claimed payment amount if card payment
     if order.requires_payment_check and order.payment_amount:
@@ -117,24 +120,11 @@ def _format_order_summary(order) -> str:
 
 def _build_order_actions_kb(order, expanded: bool = False) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    # Collapsed: открыть / принять / отменить
+    # Collapsed: only show "Open" and "Cancel" buttons
     if not expanded:
         kb.row(
             InlineKeyboardButton(text="👁 Открыть", callback_data=f"order:open:{order.id}")
         )
-        if order.status == OrderStatus.NEW:
-            # For card payments requiring verification, show different buttons
-            if order.requires_payment_check:
-                kb.row(
-                    InlineKeyboardButton(text="✅ Подтвердить оплату", callback_data=f"order:confirm:{order.id}:accepted")
-                )
-                kb.row(
-                    InlineKeyboardButton(text="❌ Отклонить оплату", callback_data=f"order:confirm:{order.id}:payment_failed")
-                )
-            else:
-                kb.row(
-                    InlineKeyboardButton(text="✅ Принять", callback_data=f"order:confirm:{order.id}:accepted")
-                )
         kb.row(
             InlineKeyboardButton(text="✖️ Отменить", callback_data=f"order:confirm:{order.id}:cancelled")
         )
