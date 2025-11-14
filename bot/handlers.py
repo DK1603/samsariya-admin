@@ -659,11 +659,10 @@ async def cmd_inventory(message: types.Message):
     # Build inline keyboard with toggle buttons (only existing items)
     kb = InlineKeyboardBuilder()
     lines = []
-    # availability may be either flat fields or nested under `items`
-    nested = availability.get("items") if isinstance(availability, dict) else None
-    avail_map = nested if isinstance(nested, dict) else availability
+    
+    # Display availability status for each item
     for key in keys:
-        is_enabled = bool(avail_map.get(key, True))
+        is_enabled = availability.get(key, True)
         status = "✔️" if is_enabled else "❌"
         lines.append(f"{status} {key}")
         toggle_to = "0" if is_enabled else "1"
@@ -674,7 +673,8 @@ async def cmd_inventory(message: types.Message):
             )
         )
 
-    text = "Текущая доступность:\n\n" + "\n".join(lines)
+    text = "📦 Текущая доступность:\n\n" + "\n".join(lines)
+    text += "\n\n💡 Нажмите кнопку для изменения статуса"
     await message.answer(text, reply_markup=kb.as_markup())
 
 @router.message(Command("add_item"))
@@ -731,10 +731,9 @@ async def cb_toggle_availability(callback: CallbackQuery):
         keys = await get_inventory_keys()
         kb = InlineKeyboardBuilder()
         lines = []
-        nested = availability.get("items") if isinstance(availability, dict) else None
-        avail_map = nested if isinstance(nested, dict) else availability
+        
         for k in keys:
-            enabled = bool(avail_map.get(k, True))
+            enabled = availability.get(k, True)
             status = "✔️" if enabled else "❌"
             lines.append(f"{status} {k}")
             toggle_to = "0" if enabled else "1"
@@ -744,9 +743,11 @@ async def cb_toggle_availability(callback: CallbackQuery):
                     callback_data=f"avail:{k}:{toggle_to}",
                 )
             )
-        text = "Текущая доступность:\n\n" + "\n".join(lines)
+        
+        text = "📦 Текущая доступность:\n\n" + "\n".join(lines)
+        text += "\n\n💡 Нажмите кнопку для изменения статуса"
         await callback.message.edit_text(text, reply_markup=kb.as_markup())
-        await callback.answer("Обновлено")
+        await callback.answer(f"✅ {key}: {'включен' if is_enabled else 'выключен'}")
     else:
         await callback.answer("Не удалось обновить", show_alert=True)
 

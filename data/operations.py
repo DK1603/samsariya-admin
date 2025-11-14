@@ -264,18 +264,42 @@ async def set_config(key: str, value: str) -> bool:
 AVAILABILITY_DOC_ID = "availability"
 
 async def get_availability_dict() -> Dict[str, bool]:
-    """Fetch the availability map from a single availability doc."""
+    """Fetch the availability map from a single availability doc.
+    
+    Prioritizes root-level fields over nested 'items' for current status.
+    """
     doc = await db.availability.find_one({"_id": AVAILABILITY_DOC_ID})
     if not doc:
         return {}
-    # Exclude MongoDB fields
-    return {k: v for k, v in doc.items() if k not in {"_id"}}
+    
+    # Build availability map from root-level fields (excluding metadata)
+    metadata_fields = {"_id", "items", "migrated_at", "synced_at"}
+    avail_map = {}
+    
+    for key, value in doc.items():
+        if key not in metadata_fields and isinstance(value, bool):
+            avail_map[key] = value
+    
+    return avail_map
 
 async def set_availability_item(key: str, is_enabled: bool) -> bool:
-    """Toggle a single item's availability in the shared availability doc."""
+    """Toggle a single item's availability in the shared availability doc.
+    
+    Updates both root-level field and nested items.{key} for full synchronization
+    with client bot.
+    """
+    from datetime import datetime
+    
+    # Update both root-level and nested items field
     result = await db.availability.update_one(
         {"_id": AVAILABILITY_DOC_ID},
-        {"$set": {key: is_enabled}},
+        {
+            "$set": {
+                key: is_enabled,  # Root-level field
+                f"items.{key}": is_enabled,  # Nested field
+                "synced_at": datetime.utcnow()  # Update sync timestamp
+            }
+        },
         upsert=True,
     )
     # Consider upsert or modified as success
