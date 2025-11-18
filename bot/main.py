@@ -22,6 +22,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="menu", description="🔧 Главное меню"),
         BotCommand(command="help", description="❓ Справка"),
         BotCommand(command="new_orders", description="📋 Новые заказы"),
+        BotCommand(command="all_orders", description="📋 Все активные заказы"),
         BotCommand(command="inventory", description="📦 Управление доступностью"),
         BotCommand(command="weekly_report", description="📈 Недельный отчёт"),
         BotCommand(command="stats_orders", description="📊 Сводка по заказам"),
@@ -106,9 +107,8 @@ async def check_new_orders(bot: Bot):
                         try:
                             await bot.send_message(
                                 admin_id,
-                                f"🆕 **Новый заказ!**\n\n{format_order_summary(order)}",
-                                reply_markup=build_order_actions_kb(order),
-                                parse_mode="Markdown"
+                                f"🆕 Новый заказ!\n\n{format_order_summary(order)}",
+                                reply_markup=build_order_actions_kb(order)
                             )
                         except Exception as e:
                             print(f"Failed to send order notification to admin {admin_id}: {e}")

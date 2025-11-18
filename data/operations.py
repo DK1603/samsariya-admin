@@ -40,6 +40,24 @@ async def get_new_orders() -> List[Order]:
         orders.append(Order(**_stringify_mongo_id(doc)))
     return orders
 
+async def get_active_orders() -> List[Order]:
+    """Get all active orders (not completed, cancelled, or payment_failed).
+    
+    Returns orders with status: NEW, ACCEPTED, IN_PROGRESS, READY
+    Sorted by created_at (newest first)
+    """
+    active_statuses = [
+        OrderStatus.NEW,
+        OrderStatus.ACCEPTED,
+        OrderStatus.IN_PROGRESS,
+        OrderStatus.READY
+    ]
+    cursor = db.orders.find({"status": {"$in": active_statuses}}).sort("created_at", -1)
+    orders = []
+    async for doc in cursor:
+        orders.append(Order(**_stringify_mongo_id(doc)))
+    return orders
+
 async def update_order_status(order_id: str, status: OrderStatus) -> bool:
     """Update order status"""
     from bson import ObjectId
