@@ -43,23 +43,50 @@ def format_order_summary(order) -> str:
     else:
         name = "—"
     
-    return (
-        f"🆔 {order.id}\n"
-        f"👤 {name}\n"
-        f"💰 {order.total:,} сум\n"
-        f"📦 {len(order.items)} позиций\n"
-        f"📅 {format_uzbekistan_datetime(order.created_at)}\n"
-    )
+    # Build summary lines
+    lines = []
+    
+    # Add payment verification warning for card payments
+    if order.requires_payment_check:
+        lines.append("⚠️ ТРЕБУЕТ ПРОВЕРКИ ОПЛАТЫ")
+    
+    lines.append(f"🆔 {order.id}")
+    lines.append(f"👤 {name}")
+    
+    # Determine payment method clearly
+    if "карт" in order.method.lower() or "card" in order.method.lower():
+        payment_method = "💳 Оплата картой"
+        if order.payment_verified:
+            payment_method += " ✅"
+        elif order.requires_payment_check:
+            payment_method += " ⏳"
+    else:
+        payment_method = "💵 Наличные"
+    
+    lines.append(f"💰 {order.total:,} сум")
+    lines.append(f"💳 {payment_method}")
+    
+    # Show claimed payment amount if card payment
+    if order.requires_payment_check and order.payment_amount:
+        lines.append(f"⚠️ Клиент указал: {order.payment_amount:,} сум")
+    
+    lines.append(f"📦 {len(order.items)} позиций")
+    lines.append(f"📅 {format_uzbekistan_datetime(order.created_at)}")
+    
+    return "\n".join(lines)
 
 def build_order_actions_kb(order) -> dict:
-    """Build order action keyboard for notifications"""
+    """Build order action keyboard for notifications.
+    
+    Shows only "Open" and "Cancel" buttons to prevent accidental acceptance
+    of card payment orders without verification.
+    """
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     
     kb = InlineKeyboardBuilder()
+    # Only show "Open" and "Cancel" buttons in collapsed view
     kb.row(InlineKeyboardButton(text="👁 Открыть", callback_data=f"order:open:{order.id}"))
-    if order.status == OrderStatus.NEW:
-        kb.row(InlineKeyboardButton(text="✅ Принять", callback_data=f"order:confirm:{order.id}:accepted"))
     kb.row(InlineKeyboardButton(text="✖️ Отменить", callback_data=f"order:confirm:{order.id}:cancelled"))
     return kb.as_markup()
 
