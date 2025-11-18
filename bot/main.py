@@ -13,6 +13,7 @@ from data.operations import seed_availability_from_inventory, get_new_orders
 from utils.sheets import append_order_to_sheet
 from data.operations import mark_order_sheet_synced
 from data.models import OrderStatus
+from utils.helpers import format_uzbekistan_datetime
 
 async def set_bot_commands(bot: Bot):
     """Set up bot commands menu"""
@@ -32,12 +33,12 @@ async def set_bot_commands(bot: Bot):
 
 def format_order_summary(order) -> str:
     """Format order summary for notifications"""
-    # Handle both old and new contact formats
-    if order.name:
-        # New format: separate name, phone, address
+    # Handle all possible contact formats
+    if order.customer_name:
+        name = order.customer_name
+    elif order.name:
         name = order.name
     elif order.contact:
-        # Old format: "Name, Phone, Address"
         name = order.contact.split(',')[0]
     else:
         name = "—"
@@ -47,7 +48,7 @@ def format_order_summary(order) -> str:
         f"👤 {name}\n"
         f"💰 {order.total:,} сум\n"
         f"📦 {len(order.items)} позиций\n"
-        f"📅 {order.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+        f"📅 {format_uzbekistan_datetime(order.created_at)}\n"
     )
 
 def build_order_actions_kb(order) -> dict:

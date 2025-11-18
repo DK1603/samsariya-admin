@@ -20,6 +20,7 @@ from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from data.models import OrderStatus
+from utils.helpers import format_uzbekistan_datetime
 
 router = Router()
 
@@ -113,7 +114,7 @@ def _format_order_summary(order) -> str:
         lines.append(f"⚠️ Клиент указал: {order.payment_amount:,} сум")
     
     lines.append(f"📦 {len(order.items)} позиций")
-    lines.append(f"📅 {order.created_at.strftime('%d.%m.%Y %H:%M')}")
+    lines.append(f"📅 {format_uzbekistan_datetime(order.created_at)}")
     
     return "\n".join(lines)
 
